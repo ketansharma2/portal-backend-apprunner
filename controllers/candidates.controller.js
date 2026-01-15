@@ -1,12 +1,12 @@
 import Candidate from "../models/candidate.model.js";
 import ActivityLog from "../models/activityLog.model.js";
 import { upsertCandidate } from "../services/candidate.service.js";
-// import {
-//   searchCandidatesES,
-//   buildHybridSearchQuery,
-//   ES_INDEX,
-//   indexCandidate,
-// } from "../services/elasticsearch.service.js";
+import {
+  searchCandidatesES,
+  buildHybridSearchQuery,
+  ES_INDEX,
+  indexCandidate,
+} from "../services/elasticsearch.service.js";
 import client from "../services/elasticsearch.service.js";
 import logger from "../config/logger.js";
 import {
@@ -242,7 +242,7 @@ export const searchCandidates = async (req, res, next) => {
     }
 
     /* ---------------------------------------------
-       EXECUTE SEARCH
+        EXECUTE SEARCH
     --------------------------------------------- */
     const response = await client.search({
       index: ES_INDEX,
@@ -251,11 +251,15 @@ export const searchCandidates = async (req, res, next) => {
       body: esQuery,
     });
 
+    // Handle different response formats (Elasticsearch vs OpenSearch)
+    const hits = response.body?.hits || response.hits || {};
+    const total = hits.total?.value || hits.total || 0;
+
     return res.json({
-      total: response.hits.total.value,
+      total,
       page,
       size,
-      results: response.hits.hits.map((h) => ({
+      results: (hits.hits || []).map((h) => ({
         id: h._id,
         score: h._score,
         source: h._source,

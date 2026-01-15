@@ -1,14 +1,19 @@
 // scripts/bulk-index.js
+import mongoose from "mongoose";
 import Candidate from "../models/candidate.model.js";
-// import {
-//   indexCandidate,
-//   ensureIndex,
-// } from "../services/elasticsearch.service.js";
+import {
+  indexCandidate,
+  ensureIndex,
+} from "../services/elasticsearch.service.js";
 
 const BULK = 300;
 
 const bulkIndex = async () => {
   console.log("🚀 Starting bulk index…");
+
+  // Connect to MongoDB
+  await mongoose.connect(process.env.MONGO_URI);
+  console.log("✅ MongoDB connected for bulk indexing");
 
   await ensureIndex();
 
