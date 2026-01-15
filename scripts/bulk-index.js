@@ -1,9 +1,9 @@
 // scripts/bulk-index.js
 import Candidate from "../models/candidate.model.js";
-import {
-  indexCandidate,
-  ensureIndex,
-} from "../services/elasticsearch.service.js";
+// import {
+//   indexCandidate,
+//   ensureIndex,
+// } from "../services/elasticsearch.service.js";
 
 const BULK = 300;
 

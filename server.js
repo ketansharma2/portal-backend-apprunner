@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import app from "./app.js";
 import connectDB from "./config/db.js";
-import { testESConnection, ensureIndex } from "./services/elasticsearch.service.js";
+// import { testESConnection, ensureIndex } from "./services/elasticsearch.service.js";
 import runOnce from "./scripts/runOnce.js";
 
 // dotenv.config();
@@ -14,13 +14,13 @@ const startServer = async () => {
     console.log(`\n✅ MongoDB connected`);
 
     // Test Elasticsearch
-    await testESConnection();
+    // await testESConnection();
 
     // Ensure ES index exists
-    await ensureIndex();
+    // await ensureIndex();
 
     // Run bulk index ONCE only
-    await runOnce();
+    // await runOnce();
 
     // Start Express
     app.listen(PORT, () => {

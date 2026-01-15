@@ -8,7 +8,7 @@ import { limiter } from "./middlewares/rateLimiter.js";
 import logger from "./config/logger.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import router from "./routes/index.js";
-import { ensureIndex } from "./services/elasticsearch.service.js";
+// import { ensureIndex } from "./services/elasticsearch.service.js";
 
 const app = express();
 

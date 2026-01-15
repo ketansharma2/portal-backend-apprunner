@@ -1,12 +1,12 @@
 import Candidate from "../models/candidate.model.js";
 import ActivityLog from "../models/activityLog.model.js";
 import { upsertCandidate } from "../services/candidate.service.js";
-import {
-  searchCandidatesES,
-  buildHybridSearchQuery,
-  ES_INDEX,
-  indexCandidate,
-} from "../services/elasticsearch.service.js";
+// import {
+//   searchCandidatesES,
+//   buildHybridSearchQuery,
+//   ES_INDEX,
+//   indexCandidate,
+// } from "../services/elasticsearch.service.js";
 import client from "../services/elasticsearch.service.js";
 import logger from "../config/logger.js";
 import {
