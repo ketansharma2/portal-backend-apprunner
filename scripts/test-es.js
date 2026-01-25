@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import Candidate from "../models/candidate.model.js";
-// import { indexCandidate } from "../services/elasticsearch.service.js";
+import { indexCandidate } from "../services/elasticsearch.service.js";
 import dotenv from "dotenv";
 
 dotenv.config();

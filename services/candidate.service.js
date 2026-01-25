@@ -1,6 +1,6 @@
 // services/candidate.service.js
 import Candidate from "../models/candidate.model.js";
-// import { indexCandidate } from "./elasticsearch.service.js";
+import { indexCandidate } from "./elasticsearch.service.js";
 
 /**
  * Normalize candidate name fields

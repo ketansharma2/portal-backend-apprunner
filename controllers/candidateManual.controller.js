@@ -1,7 +1,7 @@
 import Candidate from "../models/candidate.model.js";
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
-// import { indexCandidate } from "../services/elasticsearch.service.js";
+import { indexCandidate } from "../services/elasticsearch.service.js";
 import ActivityLog from "../models/activityLog.model.js";
 import { extractTextFromPdfUrl } from "../utils/extractPdfText.js";
 import { extractKeywords } from "../utils/keywordExtractor.js";

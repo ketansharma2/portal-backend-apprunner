@@ -122,6 +122,7 @@ export const bulkUploadHandler = async (req, res, next) => {
 
         // ✅ INSERT NEW CANDIDATE
         await upsertCandidate(candidateData);
+        console.log(`✅ Indexed candidate: ${candidateData.unique_id} - ${candidateData.fullName}`);
         success++;
       } catch (err) {
         errors.push({
