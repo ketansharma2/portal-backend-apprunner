@@ -1,7 +1,9 @@
-// services/elasticsearch.service.js
+// services/elasticsearch.service.js (IAM Role version for App Runner)
 import dotenv from "dotenv";
 dotenv.config();
 import { Client } from "@opensearch-project/opensearch";
+import { AwsSigv4Signer } from "@opensearch-project/opensearch/aws";
+import { defaultProvider } from "@aws-sdk/credential-provider-node";
 import logger from "../config/logger.js";
 
 /* ----------------------- LOG WRAPPER ----------------------- */
@@ -10,124 +12,108 @@ const log = {
   error: (...a) => console.error("[ES ERROR]", ...a),
 };
 
-/* ----------------------- CLIENT INIT ----------------------- */
+/* ----------------------- CLIENT INIT WITH IAM ----------------------- */
 const client = new Client({
+  ...AwsSigv4Signer({
+    region: process.env.AWS_REGION || "eu-north-1",
+    service: "es",
+    getCredentials: defaultProvider(),
+  }),
   node: process.env.ELASTICSEARCH_NODE,
-  // OpenSearch client - compatible with Elasticsearch API
 });
 
 export const ES_INDEX = process.env.ES_INDEX || "candidates";
 
 /* ------------------------------------------------------------
-   CREATE INDEX — FIXED FOR ELASTIC CLOUD
+   CREATE INDEX
 ------------------------------------------------------------- */
 export const ensureIndex = async () => {
   try {
     const exists = await client.indices.exists({ index: ES_INDEX });
-    if (exists) return;
+    if (exists.body || exists.statusCode === 200) return;
 
     await client.indices.create({
       index: ES_INDEX,
-      settings: {
-        analysis: {
-          analyzer: {
-            ngram_analyzer: {
-              type: "custom",
-              tokenizer: "ngram_tokenizer",
-              filter: ["lowercase"],
+      body: {
+        settings: {
+          analysis: {
+            analyzer: {
+              ngram_analyzer: {
+                type: "custom",
+                tokenizer: "ngram_tokenizer",
+                filter: ["lowercase"],
+              },
             },
-          },
-          tokenizer: {
-            ngram_tokenizer: {
-              type: "ngram",
-              min_gram: 2,
-              max_gram: 3,
-              token_chars: ["letter", "digit"],
+            tokenizer: {
+              ngram_tokenizer: {
+                type: "ngram",
+                min_gram: 2,
+                max_gram: 3,
+                token_chars: ["letter", "digit"],
+              },
             },
           },
         },
-      },
-
-      mappings: {
-        properties: {
-          candidateId: { type: "keyword" },
-
-          name: {
-            type: "text",
-            fields: {
-              keyword: { type: "keyword" },
-              ngram: { type: "text", analyzer: "ngram_analyzer" },
-            },
-          },
-
-          designation: { type: "text" },
-          skills: {
-            type: "text",
-            fields: {
-              keyword: { type: "keyword" },
-              ngram: {
-                type: "text",
-                analyzer: "ngram_analyzer",
+        mappings: {
+          properties: {
+            candidateId: { type: "keyword" },
+            name: {
+              type: "text",
+              fields: {
+                keyword: { type: "keyword" },
+                ngram: { type: "text", analyzer: "ngram_analyzer" },
               },
             },
-          },
-
-          topSkills: {
-            type: "text",
-            fields: {
-              keyword: { type: "keyword" },
-              ngram: {
-                type: "text",
-                analyzer: "ngram_analyzer",
+            designation: { type: "text" },
+            skills: {
+              type: "text",
+              fields: {
+                keyword: { type: "keyword" },
+                ngram: { type: "text", analyzer: "ngram_analyzer" },
               },
             },
-          },
-
-          resumeText: {
-            type: "text",
-            analyzer: "standard",
-          },
-
-          resumeKeywords: {
-            type: "keyword",
-          },
-
-          recentCompany: { type: "text" },
-          companyNamesAll: { type: "keyword" },
-
-          location: {
-            type: "text",
-            fields: {
-              keyword: { type: "keyword" },
-              ngram: { type: "text", analyzer: "ngram_analyzer" },
+            topSkills: {
+              type: "text",
+              fields: {
+                keyword: { type: "keyword" },
+                ngram: { type: "text", analyzer: "ngram_analyzer" },
+              },
             },
+            resumeText: { type: "text", analyzer: "standard" },
+            resumeKeywords: { type: "keyword" },
+            recentCompany: { type: "text" },
+            companyNamesAll: { type: "keyword" },
+            location: {
+              type: "text",
+              fields: {
+                keyword: { type: "keyword" },
+                ngram: { type: "text", analyzer: "ngram_analyzer" },
+              },
+            },
+            experience: { type: "float" },
+            ctcCurrent: { type: "float" },
+            ctcExpected: { type: "float" },
+            portal: { type: "keyword" },
+            portalDate: { type: "date" },
+            applyDate: { type: "date" },
           },
-
-          experience: { type: "float" },
-          ctcCurrent: { type: "float" },
-          ctcExpected: { type: "float" },
-
-          portal: { type: "keyword" },
-          portalDate: { type: "date" },
-          applyDate: { type: "date" },
         },
       },
     });
 
     log.info(`[ES] Index '${ES_INDEX}' created successfully`);
   } catch (err) {
-    log.error("ensureIndex error:", err);
+    if (err.meta?.body?.error?.type !== "resource_already_exists_exception") {
+      log.error("ensureIndex error:", err);
+    }
   }
 };
 
 /* ------------------- HELPERS ------------------- */
 const parseExperience = (value) => {
   if (value === undefined || value === null) return 0;
-
   const cleaned = String(value).replace(/[^0-9.]/g, "");
-  if (!cleaned) return 0;
-
-  return Number(cleaned);
+  return Number(cleaned) || 0;
 };
 
 const toArray = (v) => (Array.isArray(v) ? v : v ? [String(v)] : []);
@@ -136,37 +122,28 @@ const toArray = (v) => (Array.isArray(v) ? v : v ? [String(v)] : []);
 export const indexCandidate = async (candidate) => {
   try {
     const id = candidate._id.toString();
-
     const resolvedName =
       candidate.fullName?.trim() ||
       candidate.name?.trim() ||
       candidate.candidateName?.trim() ||
       `${candidate.firstName || ""} ${candidate.lastName || ""}`.trim() ||
       null;
-
     const finalName = resolvedName === "Unknown" ? null : resolvedName;
 
     const body = {
       candidateId: id,
       name: finalName,
-
       designation: candidate.designation || "",
       topSkills: toArray(candidate.topSkills),
       skills: toArray(candidate.skills || candidate.skillsAll),
-
       recentCompany: candidate.recentCompany || "",
       companyNamesAll: toArray(candidate.companyNamesAll),
-
       resumeText: candidate.resumeText || "",
       resumeKeywords: candidate.resumeKeywords || [],
-
       location: (candidate.location || "").trim(),
-
       experience: parseExperience(candidate.experience),
-
       ctcCurrent: Number(candidate.currCTC || 0),
       ctcExpected: Number(candidate.expCTC || 0),
-
       portal: candidate.portal || "",
       portalDate: candidate.portalDate || null,
       applyDate: candidate.applyDate || null,
@@ -185,201 +162,69 @@ export const indexCandidate = async (candidate) => {
   }
 };
 
-/* ---------------------------------------------------------
-   HYBRID SEARCH QUERY (Exact + Phrase + Match + Ngram + Fuzzy)
---------------------------------------------------------- */
+/* ------------------- HYBRID SEARCH QUERY ------------------- */
 export const buildHybridSearchQuery = (q, filters = {}) => {
   const { minExp = null, maxExp = null, keywords = [] } = filters;
-  let must = [];
   let should = [];
   let filter = [];
 
-  /* ---------------------------------------------------------
-     1) NAME SEARCH (Exact + Phrase + Fuzzy)
-  --------------------------------------------------------- */
   if (q) {
     should.push(
-      /* EXACT match */
-      {
-        term: {
-          "name.keyword": {
-            value: q,
-            boost: 25,
-          },
-        },
-      },
-
-      /* PHRASE match */
-      {
-        match_phrase: {
-          name: {
-            query: q,
-            boost: 15,
-          },
-        },
-      },
-
-      /* SAFE FUZZY (VERY controlled):
-       - fuzziness: 1 → max one typo
-       - prefix_length: 2 → first 2 letters must match
-       Example:
-         "rahul" → matches "rahool" but NOT "sahul"
-    */
-      {
-        match: {
-          name: {
-            query: q,
-            fuzziness: 1,
-            prefix_length: 2,
-            max_expansions: 5,
-            boost: 8,
-          },
-        },
-      }
-
-      /* NGRAM (soft boost, DOES NOT override exact/fuzzy)
-       Useful for partials: "rah" → Rahul
-       But NOT strong enough to match "Sahul"
-    */
-      // {
-      //   match: {
-      //     "name.ngram": {
-      //       query: q,
-      //       boost: 3,
-      //     },
-      //   },
-      // }
-    );
-  }
-
-  /* ---------------------------------------------------------
-     2) DESIGNATION SEARCH
-  --------------------------------------------------------- */
-  if (q) {
-    should.push(
+      { term: { "name.keyword": { value: q, boost: 25 } } },
+      { match_phrase: { name: { query: q, boost: 15 } } },
+      { match: { name: { query: q, fuzziness: 1, prefix_length: 2, boost: 8 } } },
       { match_phrase: { designation: { query: q, boost: 15 } } },
-
       { match: { designation: { query: q, operator: "and", boost: 8 } } },
-
-      { match: { "designation.ngram": { query: q, boost: 4 } } }
-    );
-  }
-
-  /* ---------------------------------------------------------
-     3) SKILLS & TOPSKILLS SEARCH
-  --------------------------------------------------------- */
-  if (q) {
-    should.push(
+      { match: { "designation.ngram": { query: q, boost: 4 } } },
       { term: { "skills.keyword": { value: q, boost: 15 } } },
       { term: { "topSkills.keyword": { value: q, boost: 15 } } },
-
       { match: { skills: { query: q, fuzziness: "AUTO", boost: 7 } } },
-      { match: { topSkills: { query: q, fuzziness: "AUTO", boost: 7 } } }
-    );
-  }
-
-  /* ---------------------------------------------------------
-     4) COMPANY SEARCH
-  --------------------------------------------------------- */
-  if (q) {
-    should.push(
+      { match: { topSkills: { query: q, fuzziness: "AUTO", boost: 7 } } },
       { match_phrase: { recentCompany: { query: q, boost: 12 } } },
-
       { match: { recentCompany: { query: q, fuzziness: 1, boost: 6 } } },
-
       { term: { "companyNamesAll.keyword": { value: q, boost: 10 } } },
-
       { match: { companyNamesAll: { query: q, fuzziness: "AUTO", boost: 5 } } }
     );
   }
 
-  /* ---------------------------------------------------------
-     EXPERIENCE FILTER
-  --------------------------------------------------------- */
-  /* EXPERIENCE FILTER */
-
   if (minExp !== null && maxExp !== null) {
-    filter.push({
-      range: { experience: { gte: minExp, lte: maxExp } },
-    });
+    filter.push({ range: { experience: { gte: minExp, lte: maxExp } } });
   } else if (minExp !== null) {
-    filter.push({
-      range: { experience: { gte: minExp } },
-    });
+    filter.push({ range: { experience: { gte: minExp } } });
   } else if (maxExp !== null) {
-    filter.push({
-      range: { experience: { lte: maxExp } },
-    });
+    filter.push({ range: { experience: { lte: maxExp } } });
   }
 
-  /* ---------------------------------------------------------
-     DESIGNATION FILTER
-  --------------------------------------------------------- */
   if (filters.designation) {
     filter.push({ match_phrase: { designation: filters.designation } });
   }
 
-  /* ---------------------------------------------------------
-     SKILLS FILTER
-  --------------------------------------------------------- */
   if (filters.skills && filters.skills.length > 0) {
-    filter.push({
-      terms: { skills: filters.skills.map((s) => s.toLowerCase()) },
+    filter.push({ terms: { skills: filters.skills.map((s) => s.toLowerCase()) } });
+  }
+
+  if (keywords && keywords.length > 0) {
+    keywords.flatMap((k) => k.toLowerCase().split(/\s+/)).forEach((kw) => {
+      should.push(
+        { term: { resumeKeywords: { value: kw, boost: 20 } } },
+        { match: { resumeText: { query: kw, boost: 10 } } }
+      );
     });
   }
 
-  /* ---------------------------------------------------------
-   5) RESUME KEYWORDS SEARCH (PDF CONTENT)
---------------------------------------------------------- */
-  if (keywords && keywords.length > 0) {
-    keywords
-      .flatMap((k) => k.toLowerCase().split(/\s+/))
-      .forEach((kw) => {
-        should.push(
-          // Exact extracted keyword match
-          {
-            term: {
-              resumeKeywords: {
-                value: kw,
-                boost: 20,
-              },
-            },
-          },
-
-          // Full resume text match
-          {
-            match: {
-              resumeText: {
-                query: kw,
-                boost: 10,
-              },
-            },
-          }
-        );
-      });
-  }
-
-  return {
-    query: {
-      bool: {
-        must,
-        should,
-        filter,
-        minimum_should_match: should.length > 0 ? 1 : 0,
-      },
-    },
-  };
+  return { query: { bool: { should, filter, minimum_should_match: should.length > 0 ? 1 : 0 } } };
 };
 
 /* ------------------- SEARCH WRAPPER ------------------- */
 export const searchCandidatesES = async (queryBody, from = 0, size = 20) => {
   try {
-    return await client.search({
+    const response = await client.search({
       index: ES_INDEX,
       from,
       size,
       body: queryBody,
     });
+    return response;
   } catch (err) {
     log.error("searchCandidatesES error:", err.meta?.body?.error || err);
     throw err;
@@ -390,12 +235,13 @@ export const searchCandidatesES = async (queryBody, from = 0, size = 20) => {
 export const testESConnection = async () => {
   try {
     const info = await client.info();
-    const version = info.version?.number || info.body?.version?.number || "unknown";
-    log.info("Connected to search service, version:", version);
+    const version = info.body?.version?.number || info.version?.number || "unknown";
+    log.info("Connected to OpenSearch, version:", version);
   } catch (err) {
     log.error("Connection failed:", err?.message || err);
     throw err;
   }
 };
 
+/* ------------------- DEFAULT EXPORT ------------------- */
 export default client;

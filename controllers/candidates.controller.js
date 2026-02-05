@@ -7,7 +7,6 @@ import {
   ES_INDEX,
   indexCandidate,
 } from "../services/elasticsearch.service.js";
-import client from "../services/elasticsearch.service.js";
 import logger from "../config/logger.js";
 import {
   canDownloadResume,
@@ -244,12 +243,7 @@ export const searchCandidates = async (req, res, next) => {
     /* ---------------------------------------------
         EXECUTE SEARCH
     --------------------------------------------- */
-    const response = await client.search({
-      index: ES_INDEX,
-      from,
-      size,
-      body: esQuery,
-    });
+    const response = await searchCandidatesES(esQuery, from, size);
 
     // Handle different response formats (Elasticsearch vs OpenSearch)
     const hits = response.body?.hits || response.hits || {};
