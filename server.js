@@ -28,7 +28,7 @@ const startServer = async () => {
 
     // Start Express
     app.listen(PORT, () => {
-      console.log(`\n🚀 Server running at http://localhost:${PORT}\n`);
+      console.log(`\n🚀 Server running at Port : ${PORT}\n`);
     });
 
   } catch (err) {
