@@ -4,12 +4,7 @@ import connectDB from "./config/db.js";
 import { testESConnection, ensureIndex } from "./services/elasticsearch.service.js";
 import runOnce from "./scripts/runOnce.js";
 
-// Debug: Log ES configuration
-console.log("🔍 ES Config:");
-console.log("  NODE:", process.env.ELASTICSEARCH_NODE);
-console.log("  USERNAME:", process.env.ES_USERNAME);
-console.log("  PASSWORD:", process.env.ES_PASSWORD);
-console.log("  INDEX:", process.env.ES_INDEX);
+
 
 // dotenv.config();
 const PORT = process.env.PORT || 3000;
