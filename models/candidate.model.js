@@ -61,14 +61,7 @@ const candidateSchema = new mongoose.Schema(
 
     // Extra Info
     feedback: { type: String },
-    remarks: [
-      {
-        text: { type: String, required: true },
-        email: { type: String, required: true },
-        name: { type: String, required: true },
-        date: { type: Date, default: Date.now },
-      },
-    ],
+    remarks: { type: String },
 
     jdBrief: { type: String },
 
