@@ -9,6 +9,8 @@ import logger from "./config/logger.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import router from "./routes/index.js";
 // import { ensureIndex } from "./services/elasticsearch.service.js";
+import { addCandidateManually } from "./controllers/salesCandiateManual.contorller.js";
+import { authMiddleware } from "./middlewares/auth.middleware.js";
 
 const app = express();
 
@@ -16,8 +18,15 @@ const app = express();
 app.use(helmet());
 
 // CORS
-app.use(cors({ origin: process.env.FRONTEND_URL || "*", credentials: true }));
-
+app.use(
+  cors({
+    origin: [
+      process.env.FRONTEND_URL,
+      "https://maven-sales.vercel.app",
+    ],
+    credentials: true,
+  })
+);
 // JSON + URL-encoded body parser
 // app.use(express.json({ limit: "10mb" }));
 // app.use(express.urlencoded({ extended: true }));
@@ -46,7 +55,7 @@ app.use(limiter);
 // app.use("/api/bulk", bulkRoutes);
 
 app.use("/api", router);
-
+app.post('/api/candidate', addCandidateManually);
 // Health check
 app.get("/", (req, res) => res.json({ status: "OK" }));
 app.get("/api/health", (req, res) => res.json({ status: "OK" }));
