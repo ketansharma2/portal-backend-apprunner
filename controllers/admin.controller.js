@@ -116,125 +116,357 @@ export const downloadsSummary = async (req, res, next) => {
 /**
  * Advanced Analytics Controller
  */
+// export const analytics = async (req, res, next) => {
+//   try {
+//     const totalCandidates = await Candidate.countDocuments();
+
+//     const today = new Date();
+//     today.setHours(0, 0, 0, 0);
+
+//     const last7 = new Date();
+//     last7.setDate(last7.getDate() - 7);
+
+//     const todayCount = await Candidate.countDocuments({
+//       createdAt: { $gte: today },
+//     });
+
+//     const last7Count = await Candidate.countDocuments({
+//       createdAt: { $gte: last7 },
+//     });
+
+//     // ---------------------------------------
+//     // LOCATION COUNTS (ALL LOCATIONS)
+//     // ---------------------------------------
+//     const locationCounts = await Candidate.aggregate([
+//       { $match: { location: { $exists: true, $ne: "" } } },
+//       { $group: { _id: "$location", count: { $sum: 1 } } },
+//       { $sort: { count: -1 } },
+//     ]);
+
+//     // ---------------------------------------
+//     // SKILL COUNTS (ALL SKILLS)
+//     // ---------------------------------------
+//     const skillCounts = await Candidate.aggregate([
+//       { $project: { allSkills: "$skillsAll" } },
+//       { $unwind: "$allSkills" },
+//       { $group: { _id: "$allSkills", count: { $sum: 1 } } },
+//       { $sort: { count: -1 } },
+//     ]);
+
+//     // ---------------------------------------
+//     // DESIGNATION COUNTS (ALL TITLES)
+//     // ---------------------------------------
+//     const designationCounts = await Candidate.aggregate([
+//       { $match: { designation: { $exists: true, $ne: "" } } },
+//       { $group: { _id: "$designation", count: { $sum: 1 } } },
+//       { $sort: { count: -1 } },
+//     ]);
+
+//     // ---------------------------------------
+// // DESIGNATION BY LOCATION (NEW)
+// // ---------------------------------------
+// const designationByLocation = await Candidate.aggregate([
+//   {
+//     $project: {
+//       designation: {
+//         $cond: [
+//           { $and: [{ $ne: ["$designation", null] }, { $ne: ["$designation", ""] }] },
+//           "$designation",
+//           "Unknown",
+//         ],
+//       },
+//       location: {
+//         $cond: [
+//           { $and: [{ $ne: ["$location", null] }, { $ne: ["$location", ""] }] },
+//           {
+//             $toLower: {
+//               $trim: {
+//                 input: {
+//                   $arrayElemAt: [{ $split: ["$location", ","] }, 0],
+//                 },
+//               },
+//             },
+//           },
+//           "unknown",
+//         ],
+//       },
+//     },
+//   },
+//   {
+//     $group: {
+//       _id: {
+//         designation: "$designation",
+//         location: "$location",
+//       },
+//       count: { $sum: 1 },
+//     },
+//   },
+//   {
+//     $project: {
+//       _id: 0,
+//       designation: "$_id.designation",
+//       location: "$_id.location",
+//       count: 1,
+//     },
+//   },
+//   { $sort: { designation: 1, count: -1 } },
+// ]);
+
+
+//     // ---------------------------------------
+//     // COMPANY COUNTS (ALL RECENT COMPANIES)
+//     // ---------------------------------------
+//     const companyCounts = await Candidate.aggregate([
+//       { $match: { recentCompany: { $exists: true, $ne: "" } } },
+//       { $group: { _id: "$recentCompany", count: { $sum: 1 } } },
+//       { $sort: { count: -1 } },
+//     ]);
+
+//     // ---------------------------------------
+//     // PORTAL COUNTS (ALL SOURCES)
+//     // ---------------------------------------
+//     const portalCounts = await Candidate.aggregate([
+//       { $match: { portal: { $exists: true, $ne: "" } } },
+//       { $group: { _id: "$portal", count: { $sum: 1 } } },
+//       { $sort: { count: -1 } },
+//     ]);
+
+//     // ---------------------------------------
+//     // EXPERIENCE COUNTS (EXACT YEARS)
+//     // ---------------------------------------
+//     const experienceCounts = await Candidate.aggregate([
+//       {
+//         $addFields: {
+//           expString: { $toString: "$experience" },
+//         },
+//       },
+//       {
+//         $addFields: {
+//           extracted: {
+//             $regexFind: {
+//               input: "$expString",
+//               regex: /([0-9]+(\.[0-9]+)?)/,
+//             },
+//           },
+//         },
+//       },
+//       {
+//         $addFields: {
+//           parsedExp: {
+//             $cond: [
+//               { $gt: ["$extracted", null] },
+//               { $toDouble: "$extracted.match" },
+//               null,
+//             ],
+//           },
+//         },
+//       },
+//       {
+//         $addFields: {
+//           expYear: {
+//             $cond: [
+//               { $eq: ["$parsedExp", null] },
+//               null,
+//               { $floor: "$parsedExp" },
+//             ],
+//           },
+//         },
+//       },
+//       { $match: { expYear: { $ne: null } } },
+//       {
+//         $group: {
+//           _id: "$expYear",
+//           count: { $sum: 1 },
+//         },
+//       },
+//       { $sort: { _id: 1 } },
+//     ]);
+
+//     // ---------------------------------------
+//     // FINAL RESPONSE (MOST IMPORTANT PART)
+//     // ---------------------------------------
+//     res.json({
+//       totalCandidates,
+//       todayCount,
+//       last7Count,
+
+//       locationCounts,
+//       skillCounts,
+//       designationCounts,
+//       designationByLocation,
+//       companyCounts,
+//       portalCounts,
+//       experienceCounts,
+//     });
+//   } catch (err) {
+//     console.error("Analytics error:", err);
+//     next(err);
+//   }
+// };
+
 export const analytics = async (req, res, next) => {
   try {
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    // Start JSON response
+    res.write('{');
+    
+    // Send simple counts first
     const totalCandidates = await Candidate.countDocuments();
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     const last7 = new Date();
     last7.setDate(last7.getDate() - 7);
-
-    const todayCount = await Candidate.countDocuments({
-      createdAt: { $gte: today },
-    });
-
-    const last7Count = await Candidate.countDocuments({
-      createdAt: { $gte: last7 },
-    });
-
-    // ---------------------------------------
-    // LOCATION COUNTS (ALL LOCATIONS)
-    // ---------------------------------------
-    const locationCounts = await Candidate.aggregate([
+    const todayCount = await Candidate.countDocuments({ createdAt: { $gte: today } });
+    const last7Count = await Candidate.countDocuments({ createdAt: { $gte: last7 } });
+    
+    res.write(`"totalCandidates":${totalCandidates},`);
+    res.write(`"todayCount":${todayCount},`);
+    res.write(`"last7Count":${last7Count},`);
+    
+    // Stream location counts
+    res.write(`"locationCounts":[`);
+    const locationStream = Candidate.aggregate([
       { $match: { location: { $exists: true, $ne: "" } } },
       { $group: { _id: "$location", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]);
-
-    // ---------------------------------------
-    // SKILL COUNTS (ALL SKILLS)
-    // ---------------------------------------
-    const skillCounts = await Candidate.aggregate([
+      { $sort: { count: -1 } }
+    ]).cursor();
+    
+    let first = true;
+    for await (const doc of locationStream) {
+      if (!first) res.write(',');
+      res.write(JSON.stringify({ location: doc._id, count: doc.count }));
+      first = false;
+    }
+    res.write('],');
+    
+    // Stream skill counts
+    res.write(`"skillCounts":[`);
+    const skillStream = Candidate.aggregate([
       { $project: { allSkills: "$skillsAll" } },
       { $unwind: "$allSkills" },
       { $group: { _id: "$allSkills", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]);
-
-    // ---------------------------------------
-    // DESIGNATION COUNTS (ALL TITLES)
-    // ---------------------------------------
-    const designationCounts = await Candidate.aggregate([
+      { $sort: { count: -1 } }
+    ]).cursor();
+    
+    first = true;
+    for await (const doc of skillStream) {
+      if (!first) res.write(',');
+      res.write(JSON.stringify({ skill: doc._id, count: doc.count }));
+      first = false;
+    }
+    res.write('],');
+    
+    // Stream designation counts
+    res.write(`"designationCounts":[`);
+    const designationStream = Candidate.aggregate([
       { $match: { designation: { $exists: true, $ne: "" } } },
       { $group: { _id: "$designation", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]);
-
-    // ---------------------------------------
-// DESIGNATION BY LOCATION (NEW)
-// ---------------------------------------
-const designationByLocation = await Candidate.aggregate([
-  {
-    $project: {
-      designation: {
-        $cond: [
-          { $and: [{ $ne: ["$designation", null] }, { $ne: ["$designation", ""] }] },
-          "$designation",
-          "Unknown",
-        ],
-      },
-      location: {
-        $cond: [
-          { $and: [{ $ne: ["$location", null] }, { $ne: ["$location", ""] }] },
-          {
-            $toLower: {
-              $trim: {
-                input: {
-                  $arrayElemAt: [{ $split: ["$location", ","] }, 0],
+      { $sort: { count: -1 } }
+    ]).cursor();
+    
+    first = true;
+    for await (const doc of designationStream) {
+      if (!first) res.write(',');
+      res.write(JSON.stringify({ designation: doc._id, count: doc.count }));
+      first = false;
+    }
+    res.write('],');
+    
+    // Stream designation by location
+    res.write(`"designationByLocation":[`);
+    const locationDesignationStream = Candidate.aggregate([
+      {
+        $project: {
+          designation: {
+            $cond: [
+              { $and: [{ $ne: ["$designation", null] }, { $ne: ["$designation", ""] }] },
+              "$designation",
+              "Unknown",
+            ],
+          },
+          location: {
+            $cond: [
+              { $and: [{ $ne: ["$location", null] }, { $ne: ["$location", ""] }] },
+              {
+                $toLower: {
+                  $trim: {
+                    input: {
+                      $arrayElemAt: [{ $split: ["$location", ","] }, 0],
+                    },
+                  },
                 },
               },
-            },
+              "unknown",
+            ],
           },
-          "unknown",
-        ],
+        },
       },
-    },
-  },
-  {
-    $group: {
-      _id: {
-        designation: "$designation",
-        location: "$location",
+      {
+        $group: {
+          _id: {
+            designation: "$designation",
+            location: "$location",
+          },
+          count: { $sum: 1 },
+        },
       },
-      count: { $sum: 1 },
-    },
-  },
-  {
-    $project: {
-      _id: 0,
-      designation: "$_id.designation",
-      location: "$_id.location",
-      count: 1,
-    },
-  },
-  { $sort: { designation: 1, count: -1 } },
-]);
-
-
-    // ---------------------------------------
-    // COMPANY COUNTS (ALL RECENT COMPANIES)
-    // ---------------------------------------
-    const companyCounts = await Candidate.aggregate([
+      {
+        $project: {
+          _id: 0,
+          designation: "$_id.designation",
+          location: "$_id.location",
+          count: 1,
+        },
+      },
+      { $sort: { designation: 1, count: -1 } }
+    ]).cursor();
+    
+    first = true;
+    for await (const doc of locationDesignationStream) {
+      if (!first) res.write(',');
+      res.write(JSON.stringify(doc));
+      first = false;
+    }
+    res.write('],');
+    
+    // Stream company counts
+    res.write(`"companyCounts":[`);
+    const companyStream = Candidate.aggregate([
       { $match: { recentCompany: { $exists: true, $ne: "" } } },
       { $group: { _id: "$recentCompany", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]);
-
-    // ---------------------------------------
-    // PORTAL COUNTS (ALL SOURCES)
-    // ---------------------------------------
-    const portalCounts = await Candidate.aggregate([
+      { $sort: { count: -1 } }
+    ]).cursor();
+    
+    first = true;
+    for await (const doc of companyStream) {
+      if (!first) res.write(',');
+      res.write(JSON.stringify({ company: doc._id, count: doc.count }));
+      first = false;
+    }
+    res.write('],');
+    
+    // Stream portal counts
+    res.write(`"portalCounts":[`);
+    const portalStream = Candidate.aggregate([
       { $match: { portal: { $exists: true, $ne: "" } } },
       { $group: { _id: "$portal", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]);
-
-    // ---------------------------------------
-    // EXPERIENCE COUNTS (EXACT YEARS)
-    // ---------------------------------------
-    const experienceCounts = await Candidate.aggregate([
+      { $sort: { count: -1 } }
+    ]).cursor();
+    
+    first = true;
+    for await (const doc of portalStream) {
+      if (!first) res.write(',');
+      res.write(JSON.stringify({ portal: doc._id, count: doc.count }));
+      first = false;
+    }
+    res.write('],');
+    
+    // Stream experience counts
+    res.write(`"experienceCounts":[`);
+    const expStream = Candidate.aggregate([
       {
         $addFields: {
           expString: { $toString: "$experience" },
@@ -279,25 +511,21 @@ const designationByLocation = await Candidate.aggregate([
           count: { $sum: 1 },
         },
       },
-      { $sort: { _id: 1 } },
-    ]);
-
-    // ---------------------------------------
-    // FINAL RESPONSE (MOST IMPORTANT PART)
-    // ---------------------------------------
-    res.json({
-      totalCandidates,
-      todayCount,
-      last7Count,
-
-      locationCounts,
-      skillCounts,
-      designationCounts,
-      designationByLocation,
-      companyCounts,
-      portalCounts,
-      experienceCounts,
-    });
+      { $sort: { _id: 1 } }
+    ]).cursor();
+    
+    first = true;
+    for await (const doc of expStream) {
+      if (!first) res.write(',');
+      res.write(JSON.stringify({ years: doc._id, count: doc.count }));
+      first = false;
+    }
+    res.write(']');
+    
+    // End response
+    res.write('}');
+    res.end();
+    
   } catch (err) {
     console.error("Analytics error:", err);
     next(err);
