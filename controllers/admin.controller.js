@@ -317,14 +317,20 @@ export const analytics = async (req, res, next) => {
     const totalCandidates = await Candidate.countDocuments();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
     const last7 = new Date();
     last7.setDate(last7.getDate() - 7);
     const todayCount = await Candidate.countDocuments({ createdAt: { $gte: today } });
     const last7Count = await Candidate.countDocuments({ createdAt: { $gte: last7 } });
-    
+    const yesterdayCount = await Candidate.countDocuments({ 
+      createdAt: { $gte: yesterday, $lt: today } 
+   });
     res.write(`"totalCandidates":${totalCandidates},`);
     res.write(`"todayCount":${todayCount},`);
     res.write(`"last7Count":${last7Count},`);
+    res.write(`"yesterdayCount":${yesterdayCount},`);
     
     // Stream location counts
     res.write(`"locationCounts":[`);
