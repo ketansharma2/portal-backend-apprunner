@@ -23,7 +23,8 @@ app.use(
     origin: [
       process.env.FRONTEND_URL,
       "https://maven-sales.vercel.app",
-      "https://recruit.mavenjobs.in"
+      "https://recruit.mavenjobs.in",
+
     ],
     credentials: true,
   })

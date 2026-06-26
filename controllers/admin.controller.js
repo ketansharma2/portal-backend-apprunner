@@ -306,15 +306,6 @@ export const downloadsSummary = async (req, res, next) => {
 
 export const analytics = async (req, res, next) => {
   try {
-    // Set headers for streaming
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    
-    // Start JSON response
-    res.write('{');
-    
-    // Send simple counts first
-    const totalCandidates = await Candidate.countDocuments();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const yesterday = new Date();
@@ -322,216 +313,140 @@ export const analytics = async (req, res, next) => {
     yesterday.setHours(0, 0, 0, 0);
     const last7 = new Date();
     last7.setDate(last7.getDate() - 7);
-    const todayCount = await Candidate.countDocuments({ createdAt: { $gte: today } });
-    const last7Count = await Candidate.countDocuments({ createdAt: { $gte: last7 } });
-    const yesterdayCount = await Candidate.countDocuments({ 
-      createdAt: { $gte: yesterday, $lt: today } 
-   });
-    res.write(`"totalCandidates":${totalCandidates},`);
-    res.write(`"todayCount":${todayCount},`);
-    res.write(`"last7Count":${last7Count},`);
-    res.write(`"yesterdayCount":${yesterdayCount},`);
-    
-    // Stream location counts
-    res.write(`"locationCounts":[`);
-    const locationStream = Candidate.aggregate([
-      { $match: { location: { $exists: true, $ne: "" } } },
-      { $group: { _id: "$location", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).cursor();
-    
-    let first = true;
-    for await (const doc of locationStream) {
-      if (!first) res.write(',');
-      res.write(JSON.stringify({ location: doc._id, count: doc.count }));
-      first = false;
-    }
-    res.write('],');
-    
-    // Stream skill counts
-    res.write(`"skillCounts":[`);
-    const skillStream = Candidate.aggregate([
-      { $project: { allSkills: "$skillsAll" } },
-      { $unwind: "$allSkills" },
-      { $group: { _id: "$allSkills", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).cursor();
-    
-    first = true;
-    for await (const doc of skillStream) {
-      if (!first) res.write(',');
-      res.write(JSON.stringify({ skill: doc._id, count: doc.count }));
-      first = false;
-    }
-    res.write('],');
-    
-    // Stream designation counts
-    res.write(`"designationCounts":[`);
-    const designationStream = Candidate.aggregate([
-      { $match: { designation: { $exists: true, $ne: "" } } },
-      { $group: { _id: "$designation", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).cursor();
-    
-    first = true;
-    for await (const doc of designationStream) {
-      if (!first) res.write(',');
-      res.write(JSON.stringify({ designation: doc._id, count: doc.count }));
-      first = false;
-    }
-    res.write('],');
-    
-    // Stream designation by location
-    res.write(`"designationByLocation":[`);
-    const locationDesignationStream = Candidate.aggregate([
-      {
-        $project: {
-          designation: {
-            $cond: [
-              { $and: [{ $ne: ["$designation", null] }, { $ne: ["$designation", ""] }] },
-              "$designation",
-              "Unknown",
-            ],
-          },
-          location: {
-            $cond: [
-              { $and: [{ $ne: ["$location", null] }, { $ne: ["$location", ""] }] },
-              {
-                $toLower: {
-                  $trim: {
-                    input: {
-                      $arrayElemAt: [{ $split: ["$location", ","] }, 0],
+
+    // ----------------------------------------------
+    // Run ALL aggregations in parallel
+    // ----------------------------------------------
+    const [
+      totalCandidates,
+      todayCount,
+      last7Count,
+      yesterdayCount,
+      locationCounts,
+      skillCounts,
+      designationCounts,
+      designationByLocation,
+      companyCounts,
+      portalCounts,
+      experienceCounts,
+    ] = await Promise.all([
+      Candidate.countDocuments(),
+      Candidate.countDocuments({ createdAt: { $gte: today } }),
+      Candidate.countDocuments({ createdAt: { $gte: last7 } }),
+      Candidate.countDocuments({ createdAt: { $gte: yesterday, $lt: today } }),
+
+      // Location counts
+      Candidate.aggregate([
+        { $match: { location: { $exists: true, $ne: "" } } },
+        { $group: { _id: "$location", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).allowDiskUse(true),
+
+      // Skill counts (optimised: keep as is but add allowDiskUse)
+      Candidate.aggregate([
+        { $project: { allSkills: "$skillsAll" } },
+        { $unwind: "$allSkills" },
+        { $group: { _id: "$allSkills", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).allowDiskUse(true),
+
+      // Designation counts
+      Candidate.aggregate([
+        { $match: { designation: { $exists: true, $ne: "" } } },
+        { $group: { _id: "$designation", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).allowDiskUse(true),
+
+      // Designation by location
+      Candidate.aggregate([
+        {
+          $project: {
+            designation: {
+              $cond: [
+                { $and: [{ $ne: ["$designation", null] }, { $ne: ["$designation", ""] }] },
+                "$designation",
+                "Unknown",
+              ],
+            },
+            location: {
+              $cond: [
+                { $and: [{ $ne: ["$location", null] }, { $ne: ["$location", ""] }] },
+                {
+                  $toLower: {
+                    $trim: {
+                      input: { $arrayElemAt: [{ $split: ["$location", ","] }, 0] },
                     },
                   },
                 },
-              },
-              "unknown",
-            ],
-          },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            designation: "$designation",
-            location: "$location",
-          },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          designation: "$_id.designation",
-          location: "$_id.location",
-          count: 1,
-        },
-      },
-      { $sort: { designation: 1, count: -1 } }
-    ]).cursor();
-    
-    first = true;
-    for await (const doc of locationDesignationStream) {
-      if (!first) res.write(',');
-      res.write(JSON.stringify(doc));
-      first = false;
-    }
-    res.write('],');
-    
-    // Stream company counts
-    res.write(`"companyCounts":[`);
-    const companyStream = Candidate.aggregate([
-      { $match: { recentCompany: { $exists: true, $ne: "" } } },
-      { $group: { _id: "$recentCompany", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).cursor();
-    
-    first = true;
-    for await (const doc of companyStream) {
-      if (!first) res.write(',');
-      res.write(JSON.stringify({ company: doc._id, count: doc.count }));
-      first = false;
-    }
-    res.write('],');
-    
-    // Stream portal counts
-    res.write(`"portalCounts":[`);
-    const portalStream = Candidate.aggregate([
-      { $match: { portal: { $exists: true, $ne: "" } } },
-      { $group: { _id: "$portal", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).cursor();
-    
-    first = true;
-    for await (const doc of portalStream) {
-      if (!first) res.write(',');
-      res.write(JSON.stringify({ portal: doc._id, count: doc.count }));
-      first = false;
-    }
-    res.write('],');
-    
-    // Stream experience counts
-    res.write(`"experienceCounts":[`);
-    const expStream = Candidate.aggregate([
-      {
-        $addFields: {
-          expString: { $toString: "$experience" },
-        },
-      },
-      {
-        $addFields: {
-          extracted: {
-            $regexFind: {
-              input: "$expString",
-              regex: /([0-9]+(\.[0-9]+)?)/,
+                "unknown",
+              ],
             },
           },
         },
-      },
-      {
-        $addFields: {
-          parsedExp: {
-            $cond: [
-              { $gt: ["$extracted", null] },
-              { $toDouble: "$extracted.match" },
-              null,
-            ],
+        {
+          $group: {
+            _id: { designation: "$designation", location: "$location" },
+            count: { $sum: 1 },
           },
         },
-      },
-      {
-        $addFields: {
-          expYear: {
-            $cond: [
-              { $eq: ["$parsedExp", null] },
-              null,
-              { $floor: "$parsedExp" },
-            ],
+        {
+          $project: {
+            _id: 0,
+            designation: "$_id.designation",
+            location: "$_id.location",
+            count: 1,
           },
         },
-      },
-      { $match: { expYear: { $ne: null } } },
-      {
-        $group: {
-          _id: "$expYear",
-          count: { $sum: 1 },
+        { $sort: { designation: 1, count: -1 } },
+      ]).allowDiskUse(true),
+
+      // Company counts
+      Candidate.aggregate([
+        { $match: { recentCompany: { $exists: true, $ne: "" } } },
+        { $group: { _id: "$recentCompany", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).allowDiskUse(true),
+
+      // Portal counts
+      Candidate.aggregate([
+        { $match: { portal: { $exists: true, $ne: "" } } },
+        { $group: { _id: "$portal", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).allowDiskUse(true),
+
+      // ✅ OPTIMISED EXPERIENCE – no regex, just split and convert
+      Candidate.aggregate([
+        {
+          $addFields: {
+            expNum: {
+              $toDouble: {
+                $arrayElemAt: [{ $split: ["$experience", " "] }, 0],
+              },
+            },
+          },
         },
-      },
-      { $sort: { _id: 1 } }
-    ]).cursor();
-    
-    first = true;
-    for await (const doc of expStream) {
-      if (!first) res.write(',');
-      res.write(JSON.stringify({ years: doc._id, count: doc.count }));
-      first = false;
-    }
-    res.write(']');
-    
-    // End response
-    res.write('}');
-    res.end();
-    
+        { $match: { expNum: { $ne: null } } },
+        { $group: { _id: { $floor: "$expNum" }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]).allowDiskUse(true),
+    ]);
+
+    // ----------------------------------------------
+    // Send the final JSON in one response
+    // ----------------------------------------------
+    res.json({
+      totalCandidates,
+      todayCount,
+      last7Count,
+      yesterdayCount,
+      locationCounts: locationCounts.map(d => ({ location: d._id, count: d.count })),
+      skillCounts: skillCounts.map(d => ({ skill: d._id, count: d.count })),
+      designationCounts: designationCounts.map(d => ({ designation: d._id, count: d.count })),
+      designationByLocation,
+      companyCounts: companyCounts.map(d => ({ company: d._id, count: d.count })),
+      portalCounts: portalCounts.map(d => ({ portal: d._id, count: d.count })),
+      experienceCounts: experienceCounts.map(d => ({ years: d._id, count: d.count })),
+    });
   } catch (err) {
     console.error("Analytics error:", err);
     next(err);
