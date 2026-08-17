@@ -1,0 +1,228 @@
+name: Deploy SearchBar Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: maven-backend/searchbar-backend
+
+jobs:
+
+  # ==========================================
+  # BUILD AND PUSH DOCKER IMAGE
+  # ==========================================
+
+  build:
+    name: Build and Push Docker Image
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      # ----------------------------------------
+      # Checkout Repository
+      # ----------------------------------------
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+
+      # ----------------------------------------
+      # Configure AWS
+      # ----------------------------------------
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      # ----------------------------------------
+      # Login to Amazon ECR
+      # ----------------------------------------
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+
+      # ----------------------------------------
+      # Build Docker Image
+      # ----------------------------------------
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest \
+            .
+
+
+      # ----------------------------------------
+      # Push Docker Image
+      # ----------------------------------------
+
+      - name: Push Docker image
+        run: |
+
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+
+
+  # ==========================================
+  # DEPLOY TO EC2
+  # ==========================================
+
+  deploy:
+    name: Deploy SearchBar Backend to EC2
+
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ----------------------------------------
+      # Deploy through SSH
+      # ----------------------------------------
+
+      - name: Deploy to EC2
+        env:
+
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+
+          AWS_REGION: ap-south-1
+
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+
+        run: |
+
+          # ------------------------------------
+          # Create SSH private key
+          # ------------------------------------
+
+          echo "$SSH_PRIVATE_KEY" > private_key.pem
+
+          chmod 600 private_key.pem
+
+
+          # ------------------------------------
+          # Connect to EC2
+          # ------------------------------------
+
+          ssh \
+            -i private_key.pem \
+            -o StrictHostKeyChecking=no \
+            ${EC2_USERNAME}@${EC2_HOST} << EOF
+
+            set -e
+
+
+            # --------------------------------
+            # Go to application directory
+            # --------------------------------
+
+            cd ~/searchbar-backend
+
+
+            echo "================================="
+            echo "Logging into Amazon ECR..."
+            echo "================================="
+
+
+            # --------------------------------
+            # Login to ECR
+            # --------------------------------
+
+            aws ecr get-login-password \
+              --region ${AWS_REGION} | \
+              docker login \
+              --username AWS \
+              --password-stdin \
+              ${ECR_REGISTRY}
+
+
+            echo "================================="
+            echo "Pulling latest Docker image..."
+            echo "================================="
+
+
+            # --------------------------------
+            # Pull latest image
+            # --------------------------------
+
+            docker compose pull
+
+
+            echo "================================="
+            echo "Deploying SearchBar Backend..."
+            echo "================================="
+
+
+            # --------------------------------
+            # Start / Recreate application
+            # --------------------------------
+
+            docker compose up -d
+
+
+            echo "================================="
+            echo "Container Status"
+            echo "================================="
+
+
+            docker compose ps
+
+
+            echo "================================="
+            echo "Waiting for application..."
+            echo "================================="
+
+
+            sleep 10
+
+
+            echo "================================="
+            echo "Checking application health..."
+            echo "================================="
+
+
+            # --------------------------------
+            # Health Check
+            # --------------------------------
+
+            curl --fail \
+              http://localhost:5005/health
+
+
+            echo ""
+            echo "================================="
+            echo "Deployment successful!"
+            echo "================================="
+
+
+          EOF
+
+
+          # ------------------------------------
+          # Remove SSH private key
+          # ------------------------------------
+
+          rm -f private_key.pem
