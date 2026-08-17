@@ -7,7 +7,7 @@ import runOnce from "./scripts/runOnce.js";
 
 
 // dotenv.config();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5005;
 
 const startServer = async () => {
   try {

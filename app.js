@@ -24,7 +24,7 @@ app.use(
       process.env.FRONTEND_URL,
       "https://maven-sales.vercel.app",
       "https://recruit.mavenjobs.in",
-
+      "http://localhost:5173",
     ],
     credentials: true,
   })
@@ -61,7 +61,13 @@ app.post('/api/candidate', addCandidateManually);
 // Health check
 app.get("/", (req, res) => res.json({ status: "OK" }));
 app.get("/api/health", (req, res) => res.json({ status: "OK" }));
-
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        success: true,
+        status: 'healthy',
+        timestamp: new Date().toISOString()
+    });
+});
 // Global error handler
 app.use(errorMiddleware);
 
