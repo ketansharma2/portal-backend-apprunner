@@ -64,7 +64,7 @@ app.get("/api/health", (req, res) => res.json({ status: "OK" }));
 app.get('/health', (req, res) => {
     res.status(200).json({
         success: true,
-        status: 'healthy searchbar backend',
+        status: 'healthy searchbar backend working',
         timestamp: new Date().toISOString()
     });
 });
